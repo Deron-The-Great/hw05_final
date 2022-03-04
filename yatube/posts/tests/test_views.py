@@ -7,10 +7,12 @@ from django.core.cache import cache
 from django.urls import reverse
 from django.core.files.uploadedfile import SimpleUploadedFile
 
-from posts.models import Post, Group, User
+from posts.models import Follow, Post, Group, User
 from yatube.settings import POSTS_PER_PAGE
 
 USERNAME = 'username'
+FOLLOWER_USERNAME = 'follower'
+UNFOLLOWER_USERNAME = 'unfollower'
 POST_TEXT = 'Тестовый текст'
 GROUP_SLUG = 'test_group'
 GROUP_TITLE = 'Тестовый заголовок'
@@ -32,6 +34,9 @@ SMALL_GIF = (
     b'\x02\x4c\x01\x00\x3b'
 )
 TEMP_MEDIA_ROOT = tempfile.mkdtemp(dir=settings.BASE_DIR)
+FOLLOW_INDEX_URL = reverse('posts:follow_index')
+FOLLOW_URL = reverse('posts:profile_follow', args=[USERNAME])
+UNFOLLOW_URL = reverse('posts:profile_unfollow', args=[USERNAME])
 
 
 @override_settings(MEDIA_ROOT=TEMP_MEDIA_ROOT)
@@ -56,11 +61,14 @@ class PostsPagesTests(TestCase):
             group=cls.group,
             image=cls.image
         )
+        cls.follower = User.objects.create_user(username=FOLLOWER_USERNAME)
+        cls.unfollower = User.objects.create_user(username=UNFOLLOWER_USERNAME)
         cls.POST_EDIT_URL = reverse('posts:post_edit', args=[cls.post.pk])
         cls.POST_DETAIL_URL = reverse(
             'posts:post_detail',
             args=[cls.post.pk]
         )
+        Follow.objects.create(user=cls.follower, author=cls.user)
 
     @classmethod
     def tearDownClass(cls):
@@ -70,6 +78,10 @@ class PostsPagesTests(TestCase):
     def setUp(self):
         self.client = Client()
         self.client.force_login(self.user)
+        self.follower_client = Client()
+        self.follower_client.force_login(self.follower)
+        self.unfollower_client = Client()
+        self.unfollower_client.force_login(self.unfollower)
 
     def test_pages_uses_correct_context(self):
         """Страницы содержат правильный контекст."""
@@ -152,3 +164,33 @@ class PostsPagesTests(TestCase):
         cache.clear()
         content_three = self.client.get(MAIN_PAGE_URL).content
         self.assertNotEqual(content_one, content_three)
+
+    def test_follow(self):
+        len_follow = len(Follow.objects.all())
+        request = self.unfollower_client.post(
+            FOLLOW_URL,
+            follow=True
+        )
+        self.assertEqual(len(Follow.objects.all()) - len_follow, 1)
+        self.assertRedirects(request, PROFILE_URL)
+
+    def test_unfollow(self):
+        len_follow = len(Follow.objects.all())
+        request = self.follower_client.post(
+            UNFOLLOW_URL,
+            follow=True
+        )
+        self.assertEqual(len(Follow.objects.all()) - len_follow, -1)
+        self.assertRedirects(request, PROFILE_URL)
+
+    def test_follow_index(self):
+        context = self.follower_client.get(FOLLOW_INDEX_URL).context
+        self.assertEqual(len(context.get('page_obj')), 1)
+        post = context.get('page_obj')[0]
+        self.assertEqual(post.id, self.post.id)
+        self.assertEqual(post.text, self.post.text)
+        self.assertEqual(post.author, self.post.author)
+        self.assertEqual(post.group, self.post.group)
+        self.assertEqual(post.image.name, f'posts/{self.image.name}')
+        context = self.unfollower_client.get(FOLLOW_INDEX_URL).context
+        self.assertEqual(len(context.get('page_obj')), 0)
