@@ -85,10 +85,16 @@ class PostsPagesTests(TestCase):
 
     def test_pages_uses_correct_context(self):
         """Страницы содержат правильный контекст."""
-        urls = [MAIN_PAGE_URL, GROUP_URL, PROFILE_URL, self.POST_DETAIL_URL]
+        urls = [
+            MAIN_PAGE_URL,
+            GROUP_URL,
+            PROFILE_URL,
+            self.POST_DETAIL_URL,
+            FOLLOW_INDEX_URL
+        ]
         for url in urls:
             with self.subTest(url=url):
-                context = self.client.get(url).context
+                context = self.follower_client.get(url).context
                 if url != self.POST_DETAIL_URL:
                     self.assertEqual(len(context.get('page_obj')), 1)
                     post = context.get('page_obj')[0]
@@ -98,7 +104,7 @@ class PostsPagesTests(TestCase):
                 self.assertEqual(post.text, self.post.text)
                 self.assertEqual(post.author, self.post.author)
                 self.assertEqual(post.group, self.post.group)
-                self.assertEqual(post.image.name, f'posts/{self.image.name}')
+                self.assertEqual(post.image.name, self.post.image)
 
     def test_post_groups_uses_correct_context(self):
         """Страница группы содержит правильную группу."""
@@ -153,12 +159,7 @@ class PostsPagesTests(TestCase):
 
     def test_index_cache(self):
         content_one = self.client.get(MAIN_PAGE_URL).content
-        Post.objects.create(
-            text=POST_TEXT,
-            author=self.user,
-            group=self.group,
-            image=self.image
-        )
+        Post.objects.all().delete()
         content_two = self.client.get(MAIN_PAGE_URL).content
         self.assertEqual(content_one, content_two)
         cache.clear()
@@ -166,31 +167,21 @@ class PostsPagesTests(TestCase):
         self.assertNotEqual(content_one, content_three)
 
     def test_follow(self):
-        len_follow = len(Follow.objects.all())
-        request = self.unfollower_client.post(
-            FOLLOW_URL,
-            follow=True
+        self.unfollower_client.get(FOLLOW_URL)
+        self.assertTrue(
+            Follow.objects.filter(user=self.unfollower, author=self.user)
         )
-        self.assertEqual(len(Follow.objects.all()) - len_follow, 1)
-        self.assertRedirects(request, PROFILE_URL)
 
     def test_unfollow(self):
-        len_follow = len(Follow.objects.all())
-        request = self.follower_client.post(
-            UNFOLLOW_URL,
-            follow=True
+        self.follower_client.get(UNFOLLOW_URL)
+        self.assertFalse(
+            Follow.objects.filter(user=self.unfollower, author=self.user)
         )
-        self.assertEqual(len(Follow.objects.all()) - len_follow, -1)
-        self.assertRedirects(request, PROFILE_URL)
 
     def test_follow_index(self):
-        context = self.follower_client.get(FOLLOW_INDEX_URL).context
-        self.assertEqual(len(context.get('page_obj')), 1)
-        post = context.get('page_obj')[0]
-        self.assertEqual(post.id, self.post.id)
-        self.assertEqual(post.text, self.post.text)
-        self.assertEqual(post.author, self.post.author)
-        self.assertEqual(post.group, self.post.group)
-        self.assertEqual(post.image.name, f'posts/{self.image.name}')
-        context = self.unfollower_client.get(FOLLOW_INDEX_URL).context
-        self.assertEqual(len(context.get('page_obj')), 0)
+        self.assertNotIn(
+            self.post,
+            self.unfollower_client.get(
+                FOLLOW_INDEX_URL
+            ).context.get('page_obj')
+        )

@@ -60,11 +60,12 @@ class PostsFormTests(TestCase):
             'posts:post_detail',
             args=[cls.post.id]
         )
-        cls.image = SimpleUploadedFile(
-            name='small.gif',
+        cls.ADD_COMENT_URL = reverse('posts:add_comment', args=[cls.post.pk])
+        cls.images = [SimpleUploadedFile(
+            name=f'small{i}.gif',
             content=SMALL_GIF,
             content_type='image/gif'
-        )
+        ) for i in range(4)]
 
     @classmethod
     def tearDownClass(cls):
@@ -72,48 +73,81 @@ class PostsFormTests(TestCase):
         shutil.rmtree(TEMP_MEDIA_ROOT, ignore_errors=True)
 
     def setUp(self):
+        self.guest_client = Client()
         self.client = Client()
         self.client.force_login(self.user)
-        self.posts_count = Post.objects.count()
 
-    def test_creating_post_new_post_in_db(self):
+    def test_create_post_user(self):
         """Тест на добавление записи в базу данных по валидной форме."""
         posts = set(Post.objects.all())
         post_form = {
             'text': TEXT_NEW,
             'group': self.group.id,
-            'image': self.image
+            'image': self.images[0]
         }
-        response = self.client.post(
+        self.client.post(
+            POST_CREATE_URL,
+            data=post_form,
+            follow=True
+        )
+        print()
+        set_difference = set(Post.objects.all()).difference(posts)
+        self.assertEqual(len(set_difference), 1)
+        post = set_difference.pop()
+        print(post.image.path)
+        self.assertEqual(post.text, post_form['text'])
+        self.assertEqual(post.group.id, post_form['group'])
+        self.assertEqual(post.author, self.user)
+        self.assertEqual(post.image.name, f'posts/{self.images[0].name}')
+
+    def test_create_post_guest(self):
+        posts = set(Post.objects.all())
+        post_form = {
+            'text': TEXT_NEW,
+            'group': self.group.id,
+            'image': self.images[1]
+        }
+        self.guest_client.post(
             POST_CREATE_URL,
             data=post_form,
             follow=True
         )
         set_difference = set(Post.objects.all()).difference(posts)
-        self.assertEqual(len(set_difference), 1)
-        post = set_difference.pop()
-        self.assertEqual(post.text, post_form['text'])
-        self.assertEqual(post.group.id, post_form['group'])
-        self.assertEqual(post.author, self.user)
-        self.assertEqual(post.image.name, f'posts/{self.image.name}')
-        self.assertRedirects(response, PROFILE_URL)
+        self.assertEqual(len(set_difference), 0)
 
-    def test_edit_post_old_post_in_db(self):
+    def test_edit_post_user(self):
         """Тест на изменение записи в базе данных по валидной форме."""
         post_form = {
             'text': TEXT_NEW,
-            'group': self.another_group.id
+            'group': self.another_group.id,
+            'image': self.images[2]
         }
-        response = self.client.post(
+        self.client.post(
             self.POST_EDIT_URL,
             data=post_form,
             follow=True
         )
-        post = response.context.get('post')
+        post = Post.objects.get(pk=self.post.pk)
         self.assertEqual(post.text, post_form['text'])
         self.assertEqual(post.group.id, post_form['group'])
         self.assertEqual(post.author, self.post.author)
-        self.assertRedirects(response, self.POST_DETAIL_URL)
+        self.assertEqual(post.image.name, f'posts/{self.images[2].name}')
+
+    def test_edit_post_guest(self):
+        post_form = {
+            'text': TEXT_NEW,
+            'group': self.another_group.id,
+            'image': self.images[3]
+        }
+        self.guest_client.post(
+            self.POST_EDIT_URL,
+            data=post_form,
+            follow=True
+        )
+        post = Post.objects.get(pk=self.post.pk)
+        self.assertEqual(post.text, self.post.text)
+        self.assertEqual(post.group, self.post.group)
+        self.assertEqual(post.author, self.post.author)
 
     def test_post_create_uses_correct_context(self):
         """URL-адрес создания записи использует соответствующий контекст."""
@@ -126,27 +160,6 @@ class PostsFormTests(TestCase):
                         request.fields.get(value),
                         expected
                     )
-
-
-class PostsCommentsTests(TestCase):
-    @classmethod
-    def setUpClass(cls):
-        super().setUpClass()
-        cls.user = User.objects.create_user(username=USERNAME)
-        cls.post = Post.objects.create(
-            text=TEXT_OLD,
-            author=cls.user
-        )
-        cls.POST_DETAIL_URL = reverse(
-            'posts:post_detail',
-            args=[cls.post.pk]
-        )
-        cls.ADD_COMENT_URL = reverse('posts:add_comment', args=[cls.post.pk])
-
-    def setUp(self):
-        self.guest_client = Client()
-        self.user_client = Client()
-        self.user_client.force_login(self.user)
 
     def test_add_comment_guest(self):
         """Проверяем, что доступ к URL-адресам соответствует ожидаемому"""
@@ -165,10 +178,11 @@ class PostsCommentsTests(TestCase):
         self.assertEqual(len(Comment.objects.all()), 0)
 
     def test_add_comment_user(self):
+        comments = set(Comment.objects.all())
         post_form = {
             'text': COMMENT_TEXT,
         }
-        response = self.user_client.post(
+        response = self.client.post(
             self.ADD_COMENT_URL,
             data=post_form,
             follow=True
@@ -177,9 +191,9 @@ class PostsCommentsTests(TestCase):
             response,
             self.POST_DETAIL_URL
         )
-        self.assertEqual(len(Comment.objects.all()), 1)
-        comments = response.context.get('comments')
-        self.assertEqual(len(comments), 1)
-        comment = comments[0]
+        set_difference = set(Comment.objects.all()).difference(comments)
+        self.assertEqual(len(set_difference), 1)
+        comment = set_difference.pop()
         self.assertEqual(comment.author, self.user)
         self.assertEqual(comment.text, post_form['text'])
+        self.assertEqual(comment.post, self.post)

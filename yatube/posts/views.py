@@ -33,39 +33,30 @@ def group_posts(request, slug):
 
 def profile(request, username):
     author = get_object_or_404(User, username=username)
-    if request.user.is_authenticated:
-        following = Follow.objects.filter(
-            user=request.user,
-            author=author
-        ).exists()
-    else:
-        following = False
     return render(request, 'posts/profile.html', {
         'author': author,
         'page_obj': get_page_obj(author.posts.all(), request),
-        'following': following
+        'following': request.user.is_authenticated and author.following.filter(
+            user=request.user
+        ).exists()
     })
 
 
 def post_detail(request, post_id):
-    post = get_object_or_404(Post, pk=post_id)
-    form = CommentForm(request.POST or None)
-    return render(
-        request,
-        'posts/post_detail.html',
-        {'post': post, 'comments': post.comments.all(), 'form': form}
-    )
+    return render(request, 'posts/post_detail.html', {
+        'post': get_object_or_404(Post, pk=post_id),
+        'form': CommentForm(request.POST or None)
+    })
 
 
 @login_required
 def post_create(request):
     form = PostForm(request.POST or None, files=request.FILES or None)
     if not form.is_valid():
-        return render(
-            request,
-            'posts/create_post.html',
-            {'form': form, 'is_edit': False}
-        )
+        return render(request, 'posts/create_post.html', {
+            'form': form,
+            'is_edit': False
+        })
     post = form.save(commit=False)
     post.author = request.user
     post.save()
@@ -106,10 +97,9 @@ def add_comment(request, post_id):
 
 @login_required
 def follow_index(request):
-    authors = request.user.follower.values_list('author', flat=True)
     return render(request, 'posts/follow.html', {
         'page_obj': get_page_obj(
-            Post.objects.filter(author__in=authors),
+            Post.objects.filter(author__following__user=request.user),
             request
         ),
     })
@@ -120,7 +110,7 @@ def profile_follow(request, username):
     author = get_object_or_404(User, username=username)
     if (
         (author != request.user)
-        and (len(request.user.follower.filter(author=author)) == 0)
+        and not request.user.follower.filter(author=author).exists()
     ):
         Follow.objects.create(
             user=request.user,
@@ -131,9 +121,9 @@ def profile_follow(request, username):
 
 @login_required
 def profile_unfollow(request, username):
-    author = get_object_or_404(User, username=username)
-    Follow.objects.filter(
+    get_object_or_404(
+        Follow,
         user=request.user,
-        author=author
+        author=User.objects.get(username=username)
     ).delete()
     return redirect('posts:profile', username=username)

@@ -1,5 +1,6 @@
 from django.contrib.auth import get_user_model
 from django.db import models
+from django.forms import ValidationError
 
 User = get_user_model()
 
@@ -84,6 +85,10 @@ class Comment(models.Model):
         auto_now_add=True
     )
 
+    class Meta:
+        verbose_name = 'Комментарий'
+        verbose_name_plural = 'Комментарии'
+
 
 class Follow(models.Model):
     user = models.ForeignKey(
@@ -98,3 +103,14 @@ class Follow(models.Model):
         on_delete=models.CASCADE,
         related_name='following'
     )
+
+    def clean(self):
+        if Follow(user=self.user, author=self.author) in Follow.objects.all():
+            raise ValidationError('Такая подписка уже есть')
+        if self.user == self.author:
+            raise ValidationError('Нельзя подписаться на самого себя')
+        return super().clean()
+
+    class Meta:
+        verbose_name = 'Подписка'
+        verbose_name_plural = 'Подписки'

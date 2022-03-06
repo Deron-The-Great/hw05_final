@@ -42,6 +42,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'sorl.thumbnail',
+    'flags',
 ]
 
 MIDDLEWARE = [
@@ -149,3 +150,9 @@ CACHES = {
 CACHE_TIME = 20
 
 CSRF_FAILURE_VIEW = 'core.views.csrf_failure'
+
+FLAGS = {
+    'index': [],
+    'follow': [],
+    'switcher': [],
+}

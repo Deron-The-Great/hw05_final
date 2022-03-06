@@ -26,11 +26,7 @@
                 </div>
               {% endfor %}
             {% endif %}
-            <form method="post" action="
-              {% if is_edit %}{% url 'posts:post_edit' post_id %}
-              {% else %}{% url 'posts:post_create' %}
-              {% endif %}
-            " enctype="multipart/form-data">
+            <form method="post" enctype="multipart/form-data">
               {% csrf_token %}
               {% for field in form %}
                 <div class="form-group row my-3 p-3">

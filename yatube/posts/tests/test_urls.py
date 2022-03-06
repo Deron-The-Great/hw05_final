@@ -2,7 +2,7 @@ from django.test import TestCase, Client
 from django.urls import reverse
 from django.core.cache import cache
 
-from posts.models import Post, Group, User
+from posts.models import Post, Group, User, Follow
 
 USERNAME = 'user'
 AUTHOR_USERNAME = 'author'
@@ -14,9 +14,14 @@ POST_CREATE_URL = reverse('posts:post_create')
 PROFILE_URL = reverse('posts:profile', args=[USERNAME])
 GROUP_URL = reverse('posts:group_posts', args=[GROUP_SLUG])
 MAIN_PAGE_URL = reverse('posts:index')
-NOT_EXSIST_URL = '/not_exsist/'
 AUTHORISATION_URL = reverse('users:login')
 ERROR_404 = '/404'
+FOLLOW_URL = reverse('posts:follow_index')
+PROFILE_FOLLOW_URL = reverse('posts:profile_follow', args=[USERNAME])
+PROFILE_UNFOLLOW_URL = reverse('posts:profile_unfollow', args=[USERNAME])
+AUTHOR_UNFOLLOW_URL = reverse('posts:profile_unfollow', args=[AUTHOR_USERNAME])
+AUTHOR_FOLLOW_URL = reverse('posts:profile_follow', args=[AUTHOR_USERNAME])
+AUTHOR_URL = reverse('posts:profile', args=[AUTHOR_USERNAME])
 
 
 def authorisation_redirect(url):
@@ -44,7 +49,8 @@ class PostsURLTests(TestCase):
             'posts:post_detail',
             args=[cls.post.pk]
         )
-        cls.ADD_COMENT_URL = reverse('posts:add_comment', args=[cls.post.pk])
+        cls.COMMENT_URL = reverse('posts:add_comment', args=[cls.post.pk])
+        Follow.objects.create(user=cls.user, author=cls.author)
 
     def setUp(self):
         self.guest_client = Client()
@@ -62,10 +68,12 @@ class PostsURLTests(TestCase):
             [self.POST_DETAIL_URL, self.guest_client, 200],
             [self.POST_EDIT_URL, self.guest_client, 302],
             [POST_CREATE_URL, self.guest_client, 302],
-            [NOT_EXSIST_URL, self.guest_client, 404],
+            [ERROR_404, self.guest_client, 404],
             [self.POST_EDIT_URL, self.user_client, 302],
             [POST_CREATE_URL, self.user_client, 200],
             [self.POST_EDIT_URL, self.author_client, 200],
+            [FOLLOW_URL, self.guest_client, 302],
+            [FOLLOW_URL, self.user_client, 200]
         ]
         for url, client, status_code in cases:
             with self.subTest(client=client, url=url):
@@ -76,15 +84,19 @@ class PostsURLTests(TestCase):
 
     def test_urls_uses_correct_template(self):
         """URL-адрес использует соответствующий шаблон."""
-        author_client = self.author_client
         cases = [
-            [MAIN_PAGE_URL, author_client, 'posts/index.html'],
-            [GROUP_URL, author_client, 'posts/group_list.html'],
-            [PROFILE_URL, author_client, 'posts/profile.html'],
-            [self.POST_DETAIL_URL, author_client, 'posts/post_detail.html'],
-            [self.POST_EDIT_URL, author_client, 'posts/create_post.html'],
-            [POST_CREATE_URL, author_client, 'posts/create_post.html'],
-            [ERROR_404, author_client, 'core/404.html']
+            [MAIN_PAGE_URL, self.author_client, 'posts/index.html'],
+            [GROUP_URL, self.author_client, 'posts/group_list.html'],
+            [PROFILE_URL, self.author_client, 'posts/profile.html'],
+            [
+                self.POST_DETAIL_URL,
+                self.author_client,
+                'posts/post_detail.html'
+            ],
+            [self.POST_EDIT_URL, self.author_client, 'posts/create_post.html'],
+            [POST_CREATE_URL, self.author_client, 'posts/create_post.html'],
+            [ERROR_404, self.author_client, 'core/404.html'],
+            [FOLLOW_URL, self.author_client, 'posts/follow.html']
         ]
         for url, client, template in cases:
             with self.subTest(client=client, url=url):
@@ -111,6 +123,41 @@ class PostsURLTests(TestCase):
                 POST_CREATE_URL,
                 self.guest_client,
                 authorisation_redirect(POST_CREATE_URL)
+            ],
+            [
+                FOLLOW_URL,
+                self.guest_client,
+                authorisation_redirect(FOLLOW_URL)
+            ],
+            [
+                self.COMMENT_URL,
+                self.guest_client,
+                authorisation_redirect(self.COMMENT_URL)
+            ],
+            [
+                self.COMMENT_URL,
+                self.user_client,
+                self.POST_DETAIL_URL
+            ],
+            [
+                AUTHOR_FOLLOW_URL,
+                self.user_client,
+                AUTHOR_URL
+            ],
+            [
+                PROFILE_FOLLOW_URL,
+                self.guest_client,
+                authorisation_redirect(PROFILE_FOLLOW_URL)
+            ],
+            [
+                AUTHOR_UNFOLLOW_URL,
+                self.user_client,
+                AUTHOR_URL
+            ],
+            [
+                PROFILE_UNFOLLOW_URL,
+                self.guest_client,
+                authorisation_redirect(PROFILE_UNFOLLOW_URL)
             ],
         ]
         for url, client, redirect_url in cases:
