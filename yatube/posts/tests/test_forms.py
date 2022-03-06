@@ -90,11 +90,9 @@ class PostsFormTests(TestCase):
             data=post_form,
             follow=True
         )
-        print()
         set_difference = set(Post.objects.all()).difference(posts)
         self.assertEqual(len(set_difference), 1)
         post = set_difference.pop()
-        print(post.image.path)
         self.assertEqual(post.text, post_form['text'])
         self.assertEqual(post.group.id, post_form['group'])
         self.assertEqual(post.author, self.user)
