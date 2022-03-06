@@ -19,7 +19,8 @@ def get_page_obj(posts, request):
 @cache_page(CACHE_TIME, key_prefix='index_page')
 def index(request):
     return render(request, 'posts/index.html', {
-        'page_obj': get_page_obj(Post.objects.all(), request)
+        'page_obj': get_page_obj(Post.objects.all(), request),
+        'index': True
     })
 
 
@@ -102,6 +103,7 @@ def follow_index(request):
             Post.objects.filter(author__following__user=request.user),
             request
         ),
+        'follow': True
     })
 
 

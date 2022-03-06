@@ -5,8 +5,6 @@
 {% endblock %}
 {% block content %}
   <div class="container py-5">
-    {% load feature_flags %}
-    {% flag_enabled 'follow' as follow %}
     {% include 'posts/includes/switcher.html' %}
     <h1>
       Последние обновления избранных авторов
