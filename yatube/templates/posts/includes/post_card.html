@@ -14,10 +14,8 @@
   {{ post.text|linebreaks }}
 </p>
 <a href="{% url 'posts:post_detail' post.pk %}">подробная информация </a>  
-{% if not group_page %}
-  {% if post.group %}
-    <a href="{% url 'posts:group_posts' post.group.slug %}">
-      #{{ post.group.title }}
-    </a>
-  {% endif %}
+{% if not group_page and post.group %}
+  <a href="{% url 'posts:group_posts' post.group.slug %}">
+    #{{ post.group.title }}
+  </a>
 {% endif %}

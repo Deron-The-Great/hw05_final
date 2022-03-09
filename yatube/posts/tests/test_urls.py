@@ -33,7 +33,7 @@ class PostsURLTests(TestCase):
     def setUpClass(cls):
         super().setUpClass()
         cls.user = User.objects.create_user(username=USERNAME)
-        cls.author = User.objects.create_user(username=AUTHOR_USERNAME)
+        cls.user_author = User.objects.create_user(username=AUTHOR_USERNAME)
         cls.group = Group.objects.create(
             slug=GROUP_SLUG,
             title=GROUP_TITLE,
@@ -41,7 +41,7 @@ class PostsURLTests(TestCase):
         )
         cls.post = Post.objects.create(
             text=POST_TEXT,
-            author=cls.author,
+            author=cls.user_author,
             group=cls.group
         )
         cls.POST_EDIT_URL = reverse('posts:post_edit', args=[cls.post.pk])
@@ -49,30 +49,32 @@ class PostsURLTests(TestCase):
             'posts:post_detail',
             args=[cls.post.pk]
         )
-        Follow.objects.create(user=cls.user, author=cls.author)
-        cls.guest_client = Client()
-        cls.author_client = Client()
-        cls.author_client.force_login(cls.author)
-        cls.user_client = Client()
-        cls.user_client.force_login(cls.user)
+        Follow.objects.create(user=cls.user, author=cls.user_author)
+        cls.guest = Client()
+        cls.author = Client()
+        cls.author.force_login(cls.user_author)
+        cls.another = Client()
+        cls.another.force_login(cls.user)
 
     def test_urls_existing_at_desired_location(self):
         """Проверяем, что доступ к URL-адресам соответствует ожидаемому"""
         cases = [
-            [MAIN_PAGE_URL, self.guest_client, 200],
-            [GROUP_URL, self.guest_client, 200],
-            [PROFILE_URL, self.guest_client, 200],
-            [self.POST_DETAIL_URL, self.guest_client, 200],
-            [self.POST_EDIT_URL, self.guest_client, 302],
-            [POST_CREATE_URL, self.guest_client, 302],
-            [ERROR_404, self.guest_client, 404],
-            [self.POST_EDIT_URL, self.user_client, 302],
-            [POST_CREATE_URL, self.user_client, 200],
-            [self.POST_EDIT_URL, self.author_client, 200],
-            [FOLLOW_URL, self.guest_client, 302],
-            [FOLLOW_URL, self.user_client, 200],
-            [AUTHOR_FOLLOW_URL, self.user_client, 302],
-            [AUTHOR_UNFOLLOW_URL, self.user_client, 302],
+            [MAIN_PAGE_URL, self.guest, 200],
+            [GROUP_URL, self.guest, 200],
+            [PROFILE_URL, self.guest, 200],
+            [self.POST_DETAIL_URL, self.guest, 200],
+            [self.POST_EDIT_URL, self.guest, 302],
+            [POST_CREATE_URL, self.guest, 302],
+            [ERROR_404, self.guest, 404],
+            [self.POST_EDIT_URL, self.another, 302],
+            [POST_CREATE_URL, self.another, 200],
+            [self.POST_EDIT_URL, self.author, 200],
+            [FOLLOW_URL, self.guest, 302],
+            [FOLLOW_URL, self.another, 200],
+            [AUTHOR_FOLLOW_URL, self.another, 302],
+            [AUTHOR_UNFOLLOW_URL, self.guest, 302],
+            [AUTHOR_UNFOLLOW_URL, self.author, 404],
+            [AUTHOR_UNFOLLOW_URL, self.another, 302],
         ]
         for url, client, status_code in cases:
             with self.subTest(client=client, url=url):
@@ -84,15 +86,15 @@ class PostsURLTests(TestCase):
     def test_urls_uses_correct_template(self):
         """URL-адрес использует соответствующий шаблон."""
         cases = [
-            [MAIN_PAGE_URL, self.author_client, 'posts/index.html'],
-            [GROUP_URL, self.author_client, 'posts/group_list.html'],
-            [PROFILE_URL, self.author_client, 'posts/profile.html'],
-            [self.POST_DETAIL_URL, self.author_client,
-                'posts/post_detail.html'],
-            [self.POST_EDIT_URL, self.author_client, 'posts/create_post.html'],
-            [POST_CREATE_URL, self.author_client, 'posts/create_post.html'],
-            [ERROR_404, self.author_client, 'core/404.html'],
-            [FOLLOW_URL, self.author_client, 'posts/follow.html']
+            [MAIN_PAGE_URL, self.author, 'posts/index.html'],
+            [GROUP_URL, self.author, 'posts/group_list.html'],
+            [PROFILE_URL, self.author, 'posts/profile.html'],
+            [self.POST_DETAIL_URL, self.author,
+             'posts/post_detail.html'],
+            [self.POST_EDIT_URL, self.author, 'posts/create_post.html'],
+            [POST_CREATE_URL, self.author, 'posts/create_post.html'],
+            [ERROR_404, self.author, 'core/404.html'],
+            [FOLLOW_URL, self.author, 'posts/follow.html']
         ]
         for url, client, template in cases:
             with self.subTest(client=client, url=url):
@@ -105,22 +107,22 @@ class PostsURLTests(TestCase):
     def test_urls_redirects_correctly(self):
         """URL-адрес использует корректную переадресацию."""
         cases = [
-            [self.POST_EDIT_URL, self.guest_client,
-                authorisation_redirect(self.POST_EDIT_URL)],
-            [self.POST_EDIT_URL, self.user_client,
-                self.POST_DETAIL_URL],
-            [POST_CREATE_URL, self.guest_client,
-                authorisation_redirect(POST_CREATE_URL)],
-            [FOLLOW_URL, self.guest_client,
-                authorisation_redirect(FOLLOW_URL)],
-            [AUTHOR_FOLLOW_URL, self.user_client,
-                AUTHOR_URL],
-            [PROFILE_FOLLOW_URL, self.guest_client,
-                authorisation_redirect(PROFILE_FOLLOW_URL)],
-            [AUTHOR_UNFOLLOW_URL, self.user_client,
-                AUTHOR_URL],
-            [PROFILE_UNFOLLOW_URL, self.guest_client,
-                authorisation_redirect(PROFILE_UNFOLLOW_URL)],
+            [self.POST_EDIT_URL, self.guest,
+             authorisation_redirect(self.POST_EDIT_URL)],
+            [self.POST_EDIT_URL, self.another,
+             self.POST_DETAIL_URL],
+            [POST_CREATE_URL, self.guest,
+             authorisation_redirect(POST_CREATE_URL)],
+            [FOLLOW_URL, self.guest,
+             authorisation_redirect(FOLLOW_URL)],
+            [AUTHOR_FOLLOW_URL, self.another,
+             AUTHOR_URL],
+            [PROFILE_FOLLOW_URL, self.guest,
+             authorisation_redirect(PROFILE_FOLLOW_URL)],
+            [AUTHOR_UNFOLLOW_URL, self.another,
+             AUTHOR_URL],
+            [PROFILE_UNFOLLOW_URL, self.guest,
+             authorisation_redirect(PROFILE_UNFOLLOW_URL)],
         ]
         for url, client, redirect_url in cases:
             with self.subTest(client=client, url=url):

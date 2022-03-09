@@ -34,6 +34,7 @@ SMALL_GIF = (
     b'\x02\x4c\x01\x00\x3b'
 )
 TEMP_MEDIA_ROOT = tempfile.mkdtemp(dir=settings.BASE_DIR)
+POST_IMAGE = Post._meta.get_field("image").upload_to
 
 
 @override_settings(MEDIA_ROOT=TEMP_MEDIA_ROOT)
@@ -107,7 +108,7 @@ class PostsFormTests(TestCase):
         self.assertEqual(post.author, self.user)
         self.assertEqual(
             post.image.name,
-            f'{Post._meta.get_field("image").upload_to}{self.images[0].name}'
+            f'{POST_IMAGE}{post_form["image"].name}'
         )
         self.assertRedirects(request, PROFILE_URL)
 
@@ -139,13 +140,13 @@ class PostsFormTests(TestCase):
             data=post_form,
             follow=True
         )
-        post = Post.objects.get(pk=self.post.pk)
+        post = response.context.get('post')
         self.assertEqual(post.text, post_form['text'])
         self.assertEqual(post.group.id, post_form['group'])
         self.assertEqual(post.author, self.post.author)
         self.assertEqual(
             post.image.name,
-            f'{Post._meta.get_field("image").upload_to}{self.images[2].name}'
+            f'{POST_IMAGE}{post_form["image"].name}'
         )
         self.assertRedirects(response, self.POST_DETAIL_URL)
 
@@ -170,7 +171,7 @@ class PostsFormTests(TestCase):
                 self.assertEqual(post.text, self.post.text)
                 self.assertEqual(post.group, self.post.group)
                 self.assertEqual(post.author, self.post.author)
-                self.assertEqual(post.image.name, self.post.image.name)
+                self.assertEqual(post.image, self.post.image)
                 self.assertRedirects(response, redirrect)
 
     def test_post_create_uses_correct_context(self):
@@ -187,7 +188,7 @@ class PostsFormTests(TestCase):
 
     def test_add_comment_guest(self):
         """Проверяем, что доступ к URL-адресам соответствует ожидаемому"""
-        comments = len(Comment.objects.all())
+        comments = set(Comment.objects.all())
         post_form = {
             'text': COMMENT_TEXT,
         }
@@ -200,7 +201,7 @@ class PostsFormTests(TestCase):
             response,
             authorisation_redirect(self.ADD_COMENT_URL)
         )
-        self.assertEqual(len(Comment.objects.all()) - comments, 0)
+        self.assertEqual(set(Comment.objects.all()), comments)
 
     def test_add_comment_user(self):
         comments = set(Comment.objects.all())
