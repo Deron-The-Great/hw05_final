@@ -19,8 +19,7 @@ def get_page_obj(posts, request):
 @cache_page(CACHE_TIME, key_prefix='index_page')
 def index(request):
     return render(request, 'posts/index.html', {
-        'page_obj': get_page_obj(Post.objects.all(), request),
-        'index': True
+        'page_obj': get_page_obj(Post.objects.all(), request)
     })
 
 
@@ -37,9 +36,11 @@ def profile(request, username):
     return render(request, 'posts/profile.html', {
         'author': author,
         'page_obj': get_page_obj(author.posts.all(), request),
-        'following': request.user.is_authenticated and author.following.filter(
-            user=request.user
-        ).exists()
+        'following': (
+            request.user.is_authenticated
+            and author != request.user
+            and author.following.filter(user=request.user).exists()
+        )
     })
 
 
@@ -54,10 +55,7 @@ def post_detail(request, post_id):
 def post_create(request):
     form = PostForm(request.POST or None, files=request.FILES or None)
     if not form.is_valid():
-        return render(request, 'posts/create_post.html', {
-            'form': form,
-            'is_edit': False
-        })
+        return render(request, 'posts/create_post.html', {'form': form})
     post = form.save(commit=False)
     post.author = request.user
     post.save()
@@ -102,8 +100,7 @@ def follow_index(request):
         'page_obj': get_page_obj(
             Post.objects.filter(author__following__user=request.user),
             request
-        ),
-        'follow': True
+        )
     })
 
 

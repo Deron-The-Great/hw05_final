@@ -69,19 +69,17 @@ class PostsPagesTests(TestCase):
             args=[cls.post.pk]
         )
         Follow.objects.create(user=cls.follower, author=cls.user)
+        cls.client = Client()
+        cls.client.force_login(cls.user)
+        cls.follower_client = Client()
+        cls.follower_client.force_login(cls.follower)
+        cls.unfollower_client = Client()
+        cls.unfollower_client.force_login(cls.unfollower)
 
     @classmethod
     def tearDownClass(cls):
         super().tearDownClass()
         shutil.rmtree(TEMP_MEDIA_ROOT, ignore_errors=True)
-
-    def setUp(self):
-        self.client = Client()
-        self.client.force_login(self.user)
-        self.follower_client = Client()
-        self.follower_client.force_login(self.follower)
-        self.unfollower_client = Client()
-        self.unfollower_client.force_login(self.unfollower)
 
     def test_pages_uses_correct_context(self):
         """Страницы содержат правильный контекст."""
@@ -104,7 +102,7 @@ class PostsPagesTests(TestCase):
                 self.assertEqual(post.text, self.post.text)
                 self.assertEqual(post.author, self.post.author)
                 self.assertEqual(post.group, self.post.group)
-                self.assertEqual(post.image.name, self.post.image)
+                self.assertEqual(post.image, self.post.image)
 
     def test_post_groups_uses_correct_context(self):
         """Страница группы содержит правильную группу."""
@@ -126,10 +124,15 @@ class PostsPagesTests(TestCase):
             title=NEW_GROUP_TITLE,
             description=NEW_GROUP_DESCRIPTION
         )
-        self.assertNotIn(
-            self.post,
-            self.client.get(NEW_GROUP_URL).context.get('page_obj')
-        )
+        cases = [
+            [self.client, NEW_GROUP_URL],
+            [self.unfollower_client, FOLLOW_INDEX_URL]
+        ]
+        for client, url in cases:
+            self.assertNotIn(
+                self.post,
+                client.get(url).context.get('page_obj')
+            )
 
     def test_page_contains_records(self):
         """Страница содержит нужное количество записей."""
@@ -176,12 +179,4 @@ class PostsPagesTests(TestCase):
         self.follower_client.get(UNFOLLOW_URL)
         self.assertFalse(
             Follow.objects.filter(user=self.unfollower, author=self.user)
-        )
-
-    def test_follow_index(self):
-        self.assertNotIn(
-            self.post,
-            self.unfollower_client.get(
-                FOLLOW_INDEX_URL
-            ).context.get('page_obj')
         )

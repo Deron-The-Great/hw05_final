@@ -40,10 +40,10 @@
         </a>
       {% endif %}
       {% if user.is_authenticated %}
-        {% include 'posts/includes/comment_form.html' with form=form %}
+        {% include 'posts/includes/comment_form.html' %}
       {% endif %}
       {% for comment in post.comments.all %}
-        {% include 'posts/includes/comment_card.html' with comment=comment %}
+        {% include 'posts/includes/comment_card.html' %}
       {% endfor %}
     </article>
   </div> 

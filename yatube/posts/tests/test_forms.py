@@ -8,8 +8,10 @@ from django.conf import settings
 from django.core.files.uploadedfile import SimpleUploadedFile
 
 from posts.models import Post, Group, User, Comment
+from posts.tests.test_urls import authorisation_redirect
 
 USERNAME = 'username'
+NOT_AUTHOR = 'not_author'
 GROUP_SLUGS = ['test_group', 'another_group']
 GROUP_TITLES = ['Тестовый заголовок 1', 'Тестовый заголовок 2']
 GROUP_DESCTIPTIONS = ['Тестовое описание 1', 'Тестовое описание 2']
@@ -40,6 +42,7 @@ class PostsFormTests(TestCase):
     def setUpClass(cls):
         super().setUpClass()
         cls.user = User.objects.create_user(username=USERNAME)
+        cls.not_author = User.objects.create_user(username=NOT_AUTHOR)
         cls.group = Group.objects.create(
             slug=GROUP_SLUGS[0],
             title=GROUP_TITLES[0],
@@ -50,10 +53,16 @@ class PostsFormTests(TestCase):
             title=GROUP_TITLES[1],
             description=GROUP_DESCTIPTIONS[1]
         )
+        cls.image = SimpleUploadedFile(
+            name='small.gif',
+            content=SMALL_GIF,
+            content_type='image/gif'
+        )
         cls.post = Post.objects.create(
             text=TEXT_OLD,
             author=cls.user,
-            group=cls.group
+            group=cls.group,
+            image=cls.image
         )
         cls.POST_EDIT_URL = reverse('posts:post_edit', args=[cls.post.pk])
         cls.POST_DETAIL_URL = reverse(
@@ -66,16 +75,16 @@ class PostsFormTests(TestCase):
             content=SMALL_GIF,
             content_type='image/gif'
         ) for i in range(4)]
+        cls.guest_client = Client()
+        cls.user_client = Client()
+        cls.user_client.force_login(cls.user)
+        cls.not_author_client = Client()
+        cls.not_author_client.force_login(cls.not_author)
 
     @classmethod
     def tearDownClass(cls):
         super().tearDownClass()
         shutil.rmtree(TEMP_MEDIA_ROOT, ignore_errors=True)
-
-    def setUp(self):
-        self.guest_client = Client()
-        self.client = Client()
-        self.client.force_login(self.user)
 
     def test_create_post_user(self):
         """Тест на добавление записи в базу данных по валидной форме."""
@@ -85,7 +94,7 @@ class PostsFormTests(TestCase):
             'group': self.group.id,
             'image': self.images[0]
         }
-        self.client.post(
+        request = self.user_client.post(
             POST_CREATE_URL,
             data=post_form,
             follow=True
@@ -96,22 +105,27 @@ class PostsFormTests(TestCase):
         self.assertEqual(post.text, post_form['text'])
         self.assertEqual(post.group.id, post_form['group'])
         self.assertEqual(post.author, self.user)
-        self.assertEqual(post.image.name, f'posts/{self.images[0].name}')
+        self.assertEqual(
+            post.image.name,
+            f'{Post._meta.get_field("image").upload_to}{self.images[0].name}'
+        )
+        self.assertRedirects(request, PROFILE_URL)
 
     def test_create_post_guest(self):
-        posts = set(Post.objects.all())
+        posts_before = set(Post.objects.all())
         post_form = {
             'text': TEXT_NEW,
             'group': self.group.id,
             'image': self.images[1]
         }
-        self.guest_client.post(
+        request = self.guest_client.post(
             POST_CREATE_URL,
             data=post_form,
             follow=True
         )
-        set_difference = set(Post.objects.all()).difference(posts)
-        self.assertEqual(len(set_difference), 0)
+        posts_after = set(Post.objects.all())
+        self.assertEqual(posts_before, posts_after)
+        self.assertRedirects(request, authorisation_redirect(POST_CREATE_URL))
 
     def test_edit_post_user(self):
         """Тест на изменение записи в базе данных по валидной форме."""
@@ -120,7 +134,7 @@ class PostsFormTests(TestCase):
             'group': self.another_group.id,
             'image': self.images[2]
         }
-        self.client.post(
+        response = self.user_client.post(
             self.POST_EDIT_URL,
             data=post_form,
             follow=True
@@ -129,29 +143,41 @@ class PostsFormTests(TestCase):
         self.assertEqual(post.text, post_form['text'])
         self.assertEqual(post.group.id, post_form['group'])
         self.assertEqual(post.author, self.post.author)
-        self.assertEqual(post.image.name, f'posts/{self.images[2].name}')
+        self.assertEqual(
+            post.image.name,
+            f'{Post._meta.get_field("image").upload_to}{self.images[2].name}'
+        )
+        self.assertRedirects(response, self.POST_DETAIL_URL)
 
-    def test_edit_post_guest(self):
+    def test_edit_post_not_author(self):
         post_form = {
             'text': TEXT_NEW,
             'group': self.another_group.id,
             'image': self.images[3]
         }
-        self.guest_client.post(
-            self.POST_EDIT_URL,
-            data=post_form,
-            follow=True
-        )
-        post = Post.objects.get(pk=self.post.pk)
-        self.assertEqual(post.text, self.post.text)
-        self.assertEqual(post.group, self.post.group)
-        self.assertEqual(post.author, self.post.author)
+        cases = [
+            [self.guest_client, authorisation_redirect(self.POST_EDIT_URL)],
+            [self.not_author_client, self.POST_DETAIL_URL]
+        ]
+        for client, redirrect in cases:
+            with self.subTest(client=client):
+                response = client.post(
+                    self.POST_EDIT_URL,
+                    data=post_form,
+                    follow=True
+                )
+                post = Post.objects.get(pk=self.post.pk)
+                self.assertEqual(post.text, self.post.text)
+                self.assertEqual(post.group, self.post.group)
+                self.assertEqual(post.author, self.post.author)
+                self.assertEqual(post.image.name, self.post.image.name)
+                self.assertRedirects(response, redirrect)
 
     def test_post_create_uses_correct_context(self):
         """URL-адрес создания записи использует соответствующий контекст."""
         urls = [POST_CREATE_URL, self.POST_EDIT_URL]
         for url in urls:
-            request = self.client.get(url).context.get('form')
+            request = self.user_client.get(url).context.get('form')
             for value, expected in FORM_FIELDS.items():
                 with self.subTest(url=url, value=value):
                     self.assertIsInstance(
@@ -161,6 +187,7 @@ class PostsFormTests(TestCase):
 
     def test_add_comment_guest(self):
         """Проверяем, что доступ к URL-адресам соответствует ожидаемому"""
+        comments = len(Comment.objects.all())
         post_form = {
             'text': COMMENT_TEXT,
         }
@@ -171,16 +198,16 @@ class PostsFormTests(TestCase):
         )
         self.assertRedirects(
             response,
-            f'{AUTHORISATION_URL}?next={self.ADD_COMENT_URL}'
+            authorisation_redirect(self.ADD_COMENT_URL)
         )
-        self.assertEqual(len(Comment.objects.all()), 0)
+        self.assertEqual(len(Comment.objects.all()) - comments, 0)
 
     def test_add_comment_user(self):
         comments = set(Comment.objects.all())
         post_form = {
             'text': COMMENT_TEXT,
         }
-        response = self.client.post(
+        response = self.user_client.post(
             self.ADD_COMENT_URL,
             data=post_form,
             follow=True

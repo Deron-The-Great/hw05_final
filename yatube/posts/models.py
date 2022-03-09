@@ -105,7 +105,7 @@ class Follow(models.Model):
     )
 
     def clean(self):
-        if Follow(user=self.user, author=self.author) in Follow.objects.all():
+        if Follow.objects.filter(user=self.user, author=self.author).exists():
             raise ValidationError('Такая подписка уже есть')
         if self.user == self.author:
             raise ValidationError('Нельзя подписаться на самого себя')

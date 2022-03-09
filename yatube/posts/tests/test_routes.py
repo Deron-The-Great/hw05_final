@@ -1,9 +1,10 @@
 from django.test import TestCase
-from django.urls import reverse
+from django.urls import reverse, resolve
 
 USERNAME = 'user'
 SLUG = 'test_group'
 POST_ID = 1
+NAMESPACE = resolve('/').namespace
 
 
 class RoutesTest(TestCase):
@@ -24,6 +25,6 @@ class RoutesTest(TestCase):
         for natural, route, args in cases:
             with self.subTest(route=route):
                 self.assertEqual(
-                    reverse(f'posts:{route}', args=args),
+                    reverse(f'{NAMESPACE}:{route}', args=args),
                     natural
                 )

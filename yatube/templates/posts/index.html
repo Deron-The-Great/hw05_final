@@ -5,15 +5,16 @@
 {% endblock %}
 {% block content %}
   <div class="container py-5">
-    {% include 'posts/includes/switcher.html' %}
+    {% include 'posts/includes/switcher.html' with index='True' %}
     {% load cache %}
     {% cache cache_time index_page %}
-    <h1>
-      Последние обновления на сайте
-    </h1>
-    {% for post in page_obj %}
-      {% include 'posts/includes/post_card.html' with post=post %}  
-    {% endfor %}
+      <h1>
+        Последние обновления на сайте
+      </h1>
+      {% for post in page_obj %}
+        {% include 'posts/includes/post_card.html' %}
+        {% if not forloop.last %}<hr>{% endif %}
+      {% endfor %}
     {% endcache %}
     {% include 'posts/includes/paginator.html' %}
   </div>
